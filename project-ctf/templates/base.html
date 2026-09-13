@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTF Platform - {% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="{{ url_for('dashboard') }}" class="nav-logo">🛡️ CTF Platform</a>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('challenges') }}">Challenges</a>
+            <a href="{{ url_for('leaderboard') }}">Classement</a>
+            <a href="{{ url_for('profile') }}">Profil</a>
+            <a href="{{ url_for('settings') }}">Paramètres</a>
+            <a href="{{ url_for('api_docs') }}">API Docs</a>
+            {% if session.get('is_admin') %}
+            <a href="{{ url_for('admin_panel') }}" class="nav-admin">Admin</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}" class="nav-logout">Déconnexion</a>
+        </div>
+    </nav>
+
+    <main class="page-content">
+        {% block content %}{% endblock %}
+    </main>
+
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+
+    <div class="login-container">
+        <div class="logo">🛡️</div>
+        <h1>Bienvenue, {{ username }}</h1>
+        <p class="subtitle">Tu es connecté avec succès</p>
+
+        <p class="register-link"><a href="{{ url_for('challenges') }}">Voir les challenges →</a></p>
+        <p class="register-link"><a href="{{ url_for('leaderboard') }}">Voir le classement →</a></p>
+    </div>
+
+{% endblock %}
