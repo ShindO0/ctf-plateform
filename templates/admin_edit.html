@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Modifier un challenge{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Modifier "{{ challenge.name }}"</h1>
+        </div>
+
+        <form action="{{ url_for('admin_edit_challenge', challenge_id=challenge.id) }}" method="POST" class="admin-form" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="name" value="{{ challenge.name }}" required>
+            <textarea name="description" required>{{ challenge.description }}</textarea>
+            <input type="text" name="flag" value="{{ challenge.flag }}" required>
+            <div class="admin-form-row">
+                <input type="number" name="points" value="{{ challenge.points }}" required>
+                <select name="difficulty" required>
+                    <option value="Facile" {% if challenge.difficulty == 'Facile' %}selected{% endif %}>Facile</option>
+                    <option value="Moyen" {% if challenge.difficulty == 'Moyen' %}selected{% endif %}>Moyen</option>
+                    <option value="Difficile" {% if challenge.difficulty == 'Difficile' %}selected{% endif %}>Difficile</option>
+                </select>
+                <select name="category" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if challenge.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <textarea name="hint" placeholder="Indice (optionnel)">{{ challenge.hint }}</textarea>
+            <input type="number" name="hint_cost" value="{{ challenge.hint_cost }}">
+            <textarea name="writeup" placeholder="Writeup / explication de la solution">{{ challenge.writeup }}</textarea>
+            <label class="file-label">
+                Fichier joint {% if challenge.attachment %}(actuel : {{ challenge.attachment }} — choisis-en un nouveau pour le remplacer){% else %}(optionnel){% endif %}
+            </label>
+            <input type="file" name="attachment">
+            <button type="submit">Enregistrer les modifications</button>
+        </form>
+
+        <a href="{{ url_for('admin_panel') }}" class="back-link">← Retour au panel admin</a>
+    </div>
+
+{% endblock %}

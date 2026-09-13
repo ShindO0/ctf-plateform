@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Documentation API{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Documentation API</h1>
+        </div>
+        <p class="subtitle" style="text-align:left; margin-bottom: 24px;">
+            Tous les endpoints nécessitent d'être connecté (cookie de session du navigateur).
+        </p>
+
+        <div class="api-docs-list">
+            {% for ep in endpoints %}
+            <div class="api-endpoint-card">
+                <div class="api-endpoint-top">
+                    <span class="api-method api-method-{{ ep.method|lower }}">{{ ep.method }}</span>
+                    <code class="api-path">{{ ep.path }}</code>
+                </div>
+                <p>{{ ep.description }}</p>
+                <span class="api-auth">{{ ep.auth }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+{% endblock %}

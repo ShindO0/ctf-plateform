@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Panel Admin</h1>
+        </div>
+
+        <div class="profile-stats">
+            <div class="stat-box">
+                <span class="stat-value">{{ total_users }}</span>
+                <span class="stat-label">Utilisateurs</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value">{{ total_challenges }}</span>
+                <span class="stat-label">Challenges</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value">{{ total_solves }}</span>
+                <span class="stat-label">Résolutions</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" style="font-size: 16px;">{{ hardest_challenge.name if hardest_challenge else '—' }}</span>
+                <span class="stat-label">Le plus dur ({{ hardest_challenge.solve_count if hardest_challenge else 0 }} résolutions)</span>
+            </div>
+        </div>
+
+        <h3 class="section-title">Ajouter un challenge</h3>
+        <form action="{{ url_for('admin_panel') }}" method="POST" class="admin-form" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="name" placeholder="Nom du challenge" required>
+            <textarea name="description" placeholder="Description" required></textarea>
+            <input type="text" name="flag" placeholder="Flag attendu (ex: CTF{...})" required>
+            <div class="admin-form-row">
+                <input type="number" name="points" placeholder="Points" required>
+                <select name="difficulty" required>
+                    <option value="Facile">Facile</option>
+                    <option value="Moyen">Moyen</option>
+                    <option value="Difficile">Difficile</option>
+                </select>
+                <select name="category" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <textarea name="hint" placeholder="Indice (optionnel)"></textarea>
+            <input type="number" name="hint_cost" placeholder="Coût de l'indice en points (0 si pas d'indice)">
+            <textarea name="writeup" placeholder="Writeup / explication de la solution (affiché une fois le challenge résolu)"></textarea>
+            <label class="file-label">Fichier joint (optionnel)</label>
+            <input type="file" name="attachment">
+            <button type="submit">Ajouter le challenge</button>
+        </form>
+
+        <h3 class="section-title">Challenges existants</h3>
+        <div class="leaderboard-list">
+            {% for c in all_challenges %}
+            <div class="leaderboard-row">
+                <span class="rank-username">{{ c.name }} — {{ c.points }} pts ({{ c.difficulty }}, {{ c.category }}) — {{ solve_counts_map.get(c.id, 0) }} résolutions</span>
+                <div class="admin-row-actions">
+                    <a href="{{ url_for('admin_edit_challenge', challenge_id=c.id) }}">
+                        <button type="button" class="edit-btn">Modifier</button>
+                    </a>
+                    <form action="{{ url_for('admin_delete_challenge', challenge_id=c.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="delete-btn">Supprimer</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+{% endblock %}
