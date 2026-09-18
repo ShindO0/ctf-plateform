@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Gestion des utilisateurs{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Utilisateurs</h1>
+            <div class="admin-row-actions">
+                <a href="{{ url_for('admin_export_leaderboard') }}"><button type="button" class="edit-btn">Exporter le classement (CSV)</button></a>
+                <a href="{{ url_for('admin_panel') }}"><button type="button" class="edit-btn">← Panel challenges</button></a>
+            </div>
+        </div>
+
+        <div class="leaderboard-list">
+            {% for u in users %}
+            <div class="leaderboard-row">
+                <span class="rank-username">
+                    {{ u.username }}
+                    {% if u.is_admin %}<span class="category-badge">Admin</span>{% endif %}
+                    {% if u.id == current_user_id %}<span class="subtitle">(toi)</span>{% endif %}
+                </span>
+                <span class="rank-points">{{ u.total_points }} pts</span>
+
+                {% if u.id != current_user_id %}
+                <div class="admin-row-actions">
+                    <form action="{{ url_for('admin_toggle_admin', user_id=u.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="edit-btn">{% if u.is_admin %}Retirer admin{% else %}Rendre admin{% endif %}</button>
+                    </form>
+                    <form action="{{ url_for('admin_delete_user', user_id=u.id) }}" method="POST" onsubmit="return confirm('Supprimer {{ u.username }} définitivement ?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="delete-btn">Supprimer</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if u.id != current_user_id %}
+            <form action="{{ url_for('admin_reset_password', user_id=u.id) }}" method="POST" class="admin-form" style="flex-direction: row; margin-bottom: 20px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="password" name="new_password" placeholder="Nouveau mot de passe pour {{ u.username }}" style="flex: 1;">
+                <button type="submit" style="width: auto; margin-top: 0;">Réinitialiser</button>
+            </form>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+{% endblock %}

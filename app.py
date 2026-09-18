@@ -2,9 +2,11 @@ import sqlite3
 import time
 import os
 import base64
+import csv
+from io import StringIO
 from datetime import timedelta
 from functools import wraps
-from flask import Flask, render_template, request, session, redirect, url_for, make_response, jsonify
+from flask import Flask, render_template, request, session, redirect, url_for, make_response, jsonify, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_wtf import CSRFProtect
@@ -561,6 +563,113 @@ def admin_delete_challenge(challenge_id):
     db.commit()
     db.close()
     return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    db = get_db()
+    users = db.execute("""
+        SELECT u.id, u.username, u.is_admin,
+               COALESCE(sp.total, 0) - COALESCE(hc.total, 0) AS total_points
+        FROM users u
+        LEFT JOIN (
+            SELECT solves.user_id AS uid, SUM(challenges.points) AS total
+            FROM solves JOIN challenges ON solves.challenge_id = challenges.id
+            GROUP BY solves.user_id
+        ) sp ON sp.uid = u.id
+        LEFT JOIN (
+            SELECT hints_used.user_id AS uid, SUM(challenges.hint_cost) AS total
+            FROM hints_used JOIN challenges ON hints_used.challenge_id = challenges.id
+            GROUP BY hints_used.user_id
+        ) hc ON hc.uid = u.id
+        ORDER BY u.username COLLATE NOCASE ASC
+    """).fetchall()
+    db.close()
+
+    return render_template("admin_users.html", users=users, current_user_id=session["user_id"])
+
+
+@app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
+@admin_required
+def admin_toggle_admin(user_id):
+    if user_id == session["user_id"]:
+        return redirect(url_for("admin_users"))
+
+    db = get_db()
+    user = db.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user:
+        new_status = 0 if user["is_admin"] else 1
+        db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_status, user_id))
+        db.commit()
+    db.close()
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    if user_id == session["user_id"]:
+        return redirect(url_for("admin_users"))
+
+    db = get_db()
+    db.execute("DELETE FROM solves WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM hints_used WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_reset_password(user_id):
+    new_password = request.form.get("new_password", "")
+
+    if len(new_password) < 4:
+        return redirect(url_for("admin_users"))
+
+    db = get_db()
+    hashed = generate_password_hash(new_password)
+    db.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user_id))
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/export-leaderboard")
+@admin_required
+def admin_export_leaderboard():
+    db = get_db()
+    rankings = db.execute("""
+        SELECT u.username,
+               COALESCE(sp.total, 0) - COALESCE(hc.total, 0) AS total_points
+        FROM users u
+        LEFT JOIN (
+            SELECT solves.user_id AS uid, SUM(challenges.points) AS total
+            FROM solves JOIN challenges ON solves.challenge_id = challenges.id
+            GROUP BY solves.user_id
+        ) sp ON sp.uid = u.id
+        LEFT JOIN (
+            SELECT hints_used.user_id AS uid, SUM(challenges.hint_cost) AS total
+            FROM hints_used JOIN challenges ON hints_used.challenge_id = challenges.id
+            GROUP BY hints_used.user_id
+        ) hc ON hc.uid = u.id
+        ORDER BY total_points DESC
+    """).fetchall()
+    db.close()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Rang", "Nom d'utilisateur", "Points"])
+    for i, row in enumerate(rankings, start=1):
+        writer.writerow([i, row["username"], row["total_points"]])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=classement.csv"}
+    )
 
 
 @app.route("/settings", methods=["GET", "POST"])
