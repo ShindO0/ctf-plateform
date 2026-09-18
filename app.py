@@ -12,6 +12,11 @@ from flask_wtf import CSRFProtect
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-changez-moi-avant-la-mise-en-ligne")
 
+# Chemin absolu vers la base, basé sur l'emplacement de ce fichier — fonctionne peu importe
+# le dossier depuis lequel le processus est lancé (console Bash, serveur WSGI, etc.)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+
 # Cookies de session sécurisés : inaccessibles en JS, bloqués sur requêtes cross-site,
 # et transmis uniquement en HTTPS une fois en ligne (Render définit la variable RENDER automatiquement)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -60,7 +65,7 @@ def clear_attempts(attempts_dict, key):
 
 
 def get_db():
-    connexion = sqlite3.connect("database.db")
+    connexion = sqlite3.connect(DB_PATH)
     connexion.row_factory = sqlite3.Row
     return connexion
 
