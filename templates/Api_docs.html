@@ -7,7 +7,11 @@
             <h1>Documentation API</h1>
         </div>
         <p class="subtitle" style="text-align:left; margin-bottom: 24px;">
-            Tous les endpoints nécessitent d'être connecté (cookie de session du navigateur).
+            Tous les endpoints nécessitent d'être authentifié, de deux façons possibles :
+            soit via le cookie de session du navigateur (connecté normalement sur le site),
+            soit via une clé API personnelle envoyée dans l'en-tête <code>X-API-Key</code>
+            (génère la tienne depuis Paramètres → Clé API). La deuxième méthode permet
+            d'appeler l'API depuis un script ou un outil comme curl/Postman, sans navigateur.
         </p>
 
         <div class="api-docs-list">

@@ -33,4 +33,34 @@
         </form>
     </div>
 
+    <div class="login-container" style="margin-top: 20px;">
+        <h1>Authentification à deux facteurs</h1>
+        {% if totp_enabled %}
+        <p class="subtitle">✅ La 2FA est activée sur ton compte.</p>
+        <form action="{{ url_for('disable_2fa') }}" method="POST" onsubmit="return confirm('Désactiver la 2FA ?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="delete-btn" style="width:100%;">Désactiver la 2FA</button>
+        </form>
+        {% else %}
+        <p class="subtitle">Ajoute une couche de sécurité supplémentaire avec une application d'authentification (Google Authenticator, Authy...).</p>
+        <a href="{{ url_for('setup_2fa') }}"><button type="button">Activer la 2FA</button></a>
+        {% endif %}
+    </div>
+
+    <div class="login-container" style="margin-top: 20px;">
+        <h1>Clé API</h1>
+        <p class="subtitle">Utilise cette clé dans l'en-tête <code>X-API-Key</code> pour appeler l'API sans navigateur.</p>
+
+        {% if api_key %}
+        <div class="writeup-box" style="text-align:center; font-family:'Courier New', monospace; font-size:13px; word-break:break-all; margin-bottom: 16px;">{{ api_key }}</div>
+        {% else %}
+        <p class="subtitle">Aucune clé générée pour l'instant.</p>
+        {% endif %}
+
+        <form action="{{ url_for('generate_api_key') }}" method="POST" onsubmit="return confirm('{% if api_key %}Générer une nouvelle clé invalidera l\'ancienne. Continuer ?{% else %}Générer une clé API ?{% endif %}');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">{% if api_key %}Régénérer{% else %}Générer{% endif %} ma clé API</button>
+        </form>
+    </div>
+
 {% endblock %}

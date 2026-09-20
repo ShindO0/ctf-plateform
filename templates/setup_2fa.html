@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Configurer la 2FA{% endblock %}
+{% block content %}
+
+    <div class="login-container">
+        <h1>Configurer la 2FA</h1>
+        <p class="subtitle">Scanne ce QR code avec Google Authenticator, Authy ou une app similaire.</p>
+
+        {% if error %}
+        <p class="error-message">{{ error }}</p>
+        {% endif %}
+
+        {% if qr_data_uri %}
+        <div style="text-align:center; margin-bottom: 20px;">
+            <img src="{{ qr_data_uri }}" alt="QR Code 2FA" style="max-width: 220px; border-radius: 8px;">
+        </div>
+        <p class="subtitle" style="text-align:left;">Impossible de scanner ? Entre cette clé manuellement dans ton app :</p>
+        <div class="writeup-box" style="text-align:center; font-family:'Courier New', monospace; font-size:14px; margin-bottom: 20px;">{{ secret }}</div>
+
+        <form action="{{ url_for('setup_2fa') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="input-group">
+                <label for="code">Code de vérification (6 chiffres)</label>
+                <input type="text" id="code" name="code" placeholder="123456" inputmode="numeric" maxlength="6" required autofocus>
+            </div>
+            <button type="submit">Activer la 2FA</button>
+        </form>
+        {% endif %}
+
+        <p class="register-link"><a href="{{ url_for('settings') }}">← Retour aux paramètres</a></p>
+    </div>
+
+{% endblock %}

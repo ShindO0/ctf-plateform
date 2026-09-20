@@ -21,6 +21,21 @@ try:
 except sqlite3.OperationalError:
     pass  # La colonne existe déjà
 
+try:
+    curseur.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''")
+except sqlite3.OperationalError:
+    pass
+
+try:
+    curseur.execute("ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0")
+except sqlite3.OperationalError:
+    pass
+
+try:
+    curseur.execute("ALTER TABLE users ADD COLUMN api_key TEXT DEFAULT ''")
+except sqlite3.OperationalError:
+    pass
+
 curseur.execute("""
     CREATE TABLE IF NOT EXISTS challenges (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

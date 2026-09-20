@@ -2,3 +2,6 @@ Flask
 Flask-WTF
 Werkzeug
 gunicorn
+pyotp
+qrcode[pil]
+pytest

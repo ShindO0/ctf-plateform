@@ -4,10 +4,14 @@ import os
 import base64
 import csv
 import json
+import secrets
+import io
+import pyotp
+import qrcode
 from io import StringIO
 from datetime import timedelta, datetime
 from functools import wraps
-from flask import Flask, render_template, request, session, redirect, url_for, make_response, jsonify, Response
+from flask import Flask, render_template, request, session, redirect, url_for, make_response, jsonify, Response, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_wtf import CSRFProtect
@@ -51,6 +55,7 @@ LOCKOUT_SECONDS = 60
 login_attempts = {}     # clé = username, valeur = liste des timestamps des échecs
 flag_attempts = {}      # clé = (user_id, challenge_id), valeur = liste des timestamps des échecs
 register_attempts = {}  # clé = adresse IP, valeur = liste des timestamps de tentatives d'inscription
+twofa_attempts = {}     # clé = user_id, valeur = liste des timestamps des codes 2FA échoués
 
 
 def is_locked_out(attempts_dict, key):
@@ -87,6 +92,14 @@ def log_admin_action(action, details=""):
     db.close()
 
 
+def generate_qr_data_uri(uri):
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    encoded = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/png;base64,{encoded}"
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -110,9 +123,24 @@ def admin_required(f):
 def api_login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if "user_id" not in session:
-            return jsonify({"error": "Authentification requise"}), 401
-        return f(*args, **kwargs)
+        if "user_id" in session:
+            db = get_db()
+            user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+            db.close()
+            if user:
+                g.api_user = user
+                return f(*args, **kwargs)
+
+        api_key = request.headers.get("X-API-Key")
+        if api_key:
+            db = get_db()
+            user = db.execute("SELECT * FROM users WHERE api_key = ?", (api_key,)).fetchone()
+            db.close()
+            if user:
+                g.api_user = user
+                return f(*args, **kwargs)
+
+        return jsonify({"error": "Authentification requise (session ou en-tête X-API-Key)"}), 401
     return decorated_function
 
 
@@ -152,6 +180,11 @@ def login():
 
     if user and check_password_hash(user["password"], password):
         clear_attempts(login_attempts, username)
+
+        if user["totp_enabled"]:
+            session["pending_2fa_user_id"] = user["id"]
+            return redirect(url_for("verify_2fa"))
+
         session.permanent = True
         session["user_id"] = user["id"]
         session["username"] = user["username"]
@@ -160,6 +193,38 @@ def login():
     else:
         record_attempt(login_attempts, username)
         return render_template("login.html", error="Nom d'utilisateur ou mot de passe incorrect.")
+
+
+@app.route("/verify-2fa", methods=["GET", "POST"])
+def verify_2fa():
+    if "pending_2fa_user_id" not in session:
+        return redirect(url_for("login_page"))
+
+    user_id = session["pending_2fa_user_id"]
+
+    if request.method == "GET":
+        return render_template("verify_2fa.html")
+
+    if is_locked_out(twofa_attempts, user_id):
+        return render_template("verify_2fa.html", error="Trop de tentatives. Réessaie dans une minute.")
+
+    code = request.form.get("code", "").strip()
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    db.close()
+
+    if user and pyotp.TOTP(user["totp_secret"]).verify(code, valid_window=1):
+        clear_attempts(twofa_attempts, user_id)
+        session.pop("pending_2fa_user_id", None)
+        session.permanent = True
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["is_admin"] = bool(user["is_admin"])
+        return redirect(url_for("dashboard"))
+    else:
+        record_attempt(twofa_attempts, user_id)
+        return render_template("verify_2fa.html", error="Code invalide.")
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -203,12 +268,12 @@ def register():
 @app.route("/api/docs")
 def api_docs():
     endpoints = [
-        {"method": "GET", "path": "/api/me", "auth": "Session requise", "description": "Retourne le pseudo et le statut admin de l'utilisateur connecté."},
-        {"method": "GET", "path": "/api/challenges", "auth": "Session requise", "description": "Liste tous les challenges. Filtre optionnel : ?category=Web"},
-        {"method": "GET", "path": "/api/challenges/<id>", "auth": "Session requise", "description": "Détail d'un challenge précis."},
-        {"method": "POST", "path": "/api/challenges/<id>/submit", "auth": "Session requise", "description": "Soumet un flag. Corps JSON attendu : {\"flag\": \"CTF{...}\"}"},
-        {"method": "GET", "path": "/api/leaderboard", "auth": "Session requise", "description": "Classement de tous les utilisateurs par points."},
-        {"method": "GET", "path": "/api/profile", "auth": "Session requise", "description": "Statistiques de l'utilisateur connecté (points, challenges résolus)."},
+        {"method": "GET", "path": "/api/me", "auth": "Session ou clé API", "description": "Retourne le pseudo et le statut admin de l'utilisateur connecté."},
+        {"method": "GET", "path": "/api/challenges", "auth": "Session ou clé API", "description": "Liste tous les challenges. Filtre optionnel : ?category=Web"},
+        {"method": "GET", "path": "/api/challenges/<id>", "auth": "Session ou clé API", "description": "Détail d'un challenge précis."},
+        {"method": "POST", "path": "/api/challenges/<id>/submit", "auth": "Session ou clé API", "description": "Soumet un flag. Corps JSON attendu : {\"flag\": \"CTF{...}\"}"},
+        {"method": "GET", "path": "/api/leaderboard", "auth": "Session ou clé API", "description": "Classement de tous les utilisateurs par points."},
+        {"method": "GET", "path": "/api/profile", "auth": "Session ou clé API", "description": "Statistiques de l'utilisateur connecté (points, challenges résolus)."},
     ]
     return render_template("api_docs.html", endpoints=endpoints)
 
@@ -781,6 +846,60 @@ def admin_import_challenges():
     return render_template("admin_import.html", success=success, errors=errors)
 
 
+@app.route("/settings/2fa/setup", methods=["GET", "POST"])
+@login_required
+def setup_2fa():
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+
+    if user["totp_enabled"]:
+        db.close()
+        return redirect(url_for("settings"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        if pyotp.TOTP(user["totp_secret"]).verify(code, valid_window=1):
+            db.execute("UPDATE users SET totp_enabled = 1 WHERE id = ?", (session["user_id"],))
+            db.commit()
+            db.close()
+            return redirect(url_for("settings"))
+        db.close()
+        return render_template("setup_2fa.html", qr_data_uri=None, secret=None, error="Code invalide, réessaie.")
+
+    # Réutilise un secret déjà généré (setup pas encore confirmé) ou en crée un nouveau
+    secret = user["totp_secret"] or pyotp.random_base32()
+    if not user["totp_secret"]:
+        db.execute("UPDATE users SET totp_secret = ? WHERE id = ?", (secret, session["user_id"]))
+        db.commit()
+    db.close()
+
+    provisioning_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user["username"], issuer_name="CTF Platform")
+    qr_data_uri = generate_qr_data_uri(provisioning_uri)
+
+    return render_template("setup_2fa.html", qr_data_uri=qr_data_uri, secret=secret, error=None)
+
+
+@app.route("/settings/2fa/disable", methods=["POST"])
+@login_required
+def disable_2fa():
+    db = get_db()
+    db.execute("UPDATE users SET totp_secret = '', totp_enabled = 0 WHERE id = ?", (session["user_id"],))
+    db.commit()
+    db.close()
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/api-key/generate", methods=["POST"])
+@login_required
+def generate_api_key():
+    new_key = secrets.token_hex(24)
+    db = get_db()
+    db.execute("UPDATE users SET api_key = ? WHERE id = ?", (new_key, session["user_id"]))
+    db.commit()
+    db.close()
+    return redirect(url_for("settings"))
+
+
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
@@ -809,7 +928,17 @@ def settings():
 
         db.close()
 
-    return render_template("settings.html", error=error, success=success)
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+    db.close()
+
+    return render_template(
+        "settings.html",
+        error=error,
+        success=success,
+        totp_enabled=bool(user["totp_enabled"]),
+        api_key=user["api_key"]
+    )
 
 
 @app.route("/logout")
@@ -822,8 +951,8 @@ def logout():
 @api_login_required
 def api_me():
     return jsonify({
-        "username": session["username"],
-        "is_admin": bool(session.get("is_admin"))
+        "username": g.api_user["username"],
+        "is_admin": bool(g.api_user["is_admin"])
     })
 
 
@@ -840,7 +969,7 @@ def api_challenges():
 
     solved_ids = {
         row["challenge_id"] for row in db.execute(
-            "SELECT challenge_id FROM solves WHERE user_id = ?", (session["user_id"],)
+            "SELECT challenge_id FROM solves WHERE user_id = ?", (g.api_user["id"],)
         ).fetchall()
     }
     db.close()
@@ -881,7 +1010,7 @@ def api_challenge_detail(challenge_id):
 @app.route("/api/challenges/<int:challenge_id>/submit", methods=["POST"])
 @api_login_required
 def api_submit_flag(challenge_id):
-    attempt_key = (session["user_id"], challenge_id)
+    attempt_key = (g.api_user["id"], challenge_id)
 
     if is_locked_out(flag_attempts, attempt_key):
         return jsonify({"error": "Trop de tentatives, réessaie plus tard"}), 429
@@ -899,7 +1028,7 @@ def api_submit_flag(challenge_id):
     if submitted_flag == challenge["flag"]:
         db.execute(
             "INSERT OR IGNORE INTO solves (user_id, challenge_id) VALUES (?, ?)",
-            (session["user_id"], challenge_id)
+            (g.api_user["id"], challenge_id)
         )
         db.commit()
         clear_attempts(flag_attempts, attempt_key)
@@ -952,20 +1081,20 @@ def api_profile():
         FROM solves
         JOIN challenges ON solves.challenge_id = challenges.id
         WHERE solves.user_id = ?
-    """, (session["user_id"],)).fetchall()
+    """, (g.api_user["id"],)).fetchall()
 
     hint_costs = db.execute("""
         SELECT COALESCE(SUM(challenges.hint_cost), 0) AS total
         FROM hints_used
         JOIN challenges ON hints_used.challenge_id = challenges.id
         WHERE hints_used.user_id = ?
-    """, (session["user_id"],)).fetchone()
+    """, (g.api_user["id"],)).fetchone()
     db.close()
 
     total_points = sum(c["points"] for c in solved_challenges) - hint_costs["total"]
 
     return jsonify({
-        "username": session["username"],
+        "username": g.api_user["username"],
         "total_points": total_points,
         "solved_count": len(solved_challenges),
         "solved_challenges": [
