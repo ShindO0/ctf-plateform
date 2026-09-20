@@ -1,1 +1,0 @@
-Rien à voir ici, ce fichier semble vide.                                                                                                                                                                                                                                                                                                            CTF{whitespace_hide}

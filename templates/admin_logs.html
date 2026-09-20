@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Journal d'activité{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Journal d'activité</h1>
+            <a href="{{ url_for('admin_panel') }}"><button type="button" class="edit-btn">← Panel challenges</button></a>
+        </div>
+        <p class="subtitle" style="text-align:left; margin-bottom: 20px;">Les 200 dernières actions administratives.</p>
+
+        <div class="leaderboard-list">
+            {% for log in logs %}
+            <div class="leaderboard-row">
+                <span class="rank-username">
+                    <strong>{{ log.admin_username }}</strong> — {{ log.action }}
+                    {% if log.details %}: {{ log.details }}{% endif %}
+                </span>
+                <span class="subtitle" style="margin-bottom: 0;">{{ log.timestamp }}</span>
+            </div>
+            {% endfor %}
+
+            {% if not logs %}
+            <p class="subtitle">Aucune action enregistrée pour l'instant.</p>
+            {% endif %}
+        </div>
+    </div>
+
+{% endblock %}

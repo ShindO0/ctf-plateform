@@ -5,7 +5,11 @@
     <div class="challenges-page">
         <div class="challenges-header">
             <h1>Panel Admin</h1>
-            <a href="{{ url_for('admin_users') }}"><button type="button" class="edit-btn">Gérer les utilisateurs</button></a>
+            <div class="admin-row-actions">
+                <a href="{{ url_for('admin_users') }}"><button type="button" class="edit-btn">Gérer les utilisateurs</button></a>
+                <a href="{{ url_for('admin_logs') }}"><button type="button" class="edit-btn">Journal d'activité</button></a>
+                <a href="{{ url_for('admin_import_challenges') }}"><button type="button" class="edit-btn">Import en masse</button></a>
+            </div>
         </div>
 
         <div class="profile-stats">

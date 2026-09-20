@@ -80,6 +80,16 @@ curseur.execute("""
     )
 """)
 
+curseur.execute("""
+    CREATE TABLE IF NOT EXISTS admin_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_username TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        timestamp TEXT NOT NULL
+    )
+""")
+
 # Deux challenges d'exemple pour tester (on en ajoutera de vrais plus tard)
 curseur.execute("SELECT COUNT(*) FROM challenges")
 if curseur.fetchone()[0] == 0:

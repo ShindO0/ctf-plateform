@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Import de challenges{% endblock %}
+{% block content %}
+
+    <div class="challenges-page">
+        <div class="challenges-header">
+            <h1>Import en masse</h1>
+            <a href="{{ url_for('admin_panel') }}"><button type="button" class="edit-btn">← Panel challenges</button></a>
+        </div>
+
+        {% if error %}
+        <p class="error-message">{{ error }}</p>
+        {% endif %}
+        {% if success %}
+        <p class="success-message">{{ success }}</p>
+        {% endif %}
+        {% if errors %}
+        <div class="error-message" style="text-align: left;">
+            {% for e in errors %}<p style="margin-bottom: 4px;">{{ e }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <form action="{{ url_for('admin_import_challenges') }}" method="POST" class="admin-form" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="file-label">Fichier .csv ou .json</label>
+            <input type="file" name="import_file" accept=".csv,.json" required>
+            <button type="submit">Importer</button>
+        </form>
+
+        <h3 class="section-title">Format attendu</h3>
+        <p class="subtitle" style="text-align:left; margin-bottom: 10px;">
+            Champs obligatoires : name, description, flag, points, difficulty, category.<br>
+            Champs optionnels : hint, hint_cost, writeup. Les challenges dont le nom existe déjà sont ignorés (pas de doublon).
+        </p>
+
+        <h3 class="section-title">Exemple CSV</h3>
+        <div class="writeup-box" style="white-space: pre-wrap; font-family: 'Courier New', monospace;">name,description,flag,points,difficulty,category,hint,hint_cost,writeup
+Mon Challenge,Une description,CTF{exemple},10,Facile,Web,Un indice,5,Une explication</div>
+
+        <h3 class="section-title">Exemple JSON</h3>
+        <div class="writeup-box" style="white-space: pre-wrap; font-family: 'Courier New', monospace;">[
+  {
+    "name": "Mon Challenge",
+    "description": "Une description",
+    "flag": "CTF{exemple}",
+    "points": 10,
+    "difficulty": "Facile",
+    "category": "Web",
+    "hint": "Un indice",
+    "hint_cost": 5,
+    "writeup": "Une explication"
+  }
+]</div>
+    </div>
+
+{% endblock %}

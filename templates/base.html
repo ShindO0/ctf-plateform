@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CTF Platform - {% block title %}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
 <body>
 
     <nav class="navbar">
         <a href="{{ url_for('dashboard') if session.get('user_id') else url_for('index') }}" class="nav-logo">🛡️ CTF Platform</a>
-        <div class="nav-links">
+        <button class="nav-toggle" onclick="document.getElementById('navLinks').classList.toggle('nav-open')" aria-label="Menu">☰</button>
+        <div class="nav-links" id="navLinks">
             {% if session.get('user_id') %}
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
             <a href="{{ url_for('challenges') }}">Challenges</a>
@@ -27,12 +34,30 @@
             <a href="{{ url_for('login_page') }}">Se connecter</a>
             <a href="{{ url_for('register') }}" class="nav-admin">S'inscrire</a>
             {% endif %}
+            <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" aria-label="Changer de thème">🌙</button>
         </div>
     </nav>
 
     <main class="page-content">
         {% block content %}{% endblock %}
     </main>
+
+    <script>
+        function updateThemeBtn() {
+            var btn = document.getElementById('themeBtn');
+            if (btn) {
+                btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+            }
+        }
+        function toggleTheme() {
+            var current = document.documentElement.getAttribute('data-theme') || 'dark';
+            var next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeBtn();
+        }
+        updateThemeBtn();
+    </script>
 
 </body>
 </html>

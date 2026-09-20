@@ -5,8 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CTF Platform - Classement public</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
 <body>
+    <button class="theme-toggle theme-toggle-floating" onclick="toggleTheme()" id="themeBtn" aria-label="Changer de thème">🌙</button>
+
 
     <nav class="landing-nav">
         <a href="{{ url_for('index') }}" class="nav-logo">🛡️ CTF Platform</a>
@@ -38,5 +46,22 @@
         </div>
     </div>
 
+
+    <script>
+        function updateThemeBtn() {
+            var btn = document.getElementById('themeBtn');
+            if (btn) {
+                btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+            }
+        }
+        function toggleTheme() {
+            var current = document.documentElement.getAttribute('data-theme') || 'dark';
+            var next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeBtn();
+        }
+        updateThemeBtn();
+    </script>
 </body>
 </html>

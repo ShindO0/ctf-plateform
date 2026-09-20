@@ -3,8 +3,9 @@ import time
 import os
 import base64
 import csv
+import json
 from io import StringIO
-from datetime import timedelta
+from datetime import timedelta, datetime
 from functools import wraps
 from flask import Flask, render_template, request, session, redirect, url_for, make_response, jsonify, Response
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -74,6 +75,16 @@ def get_db():
 
 def extension_autorisee(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_UPLOAD_EXTENSIONS
+
+
+def log_admin_action(action, details=""):
+    db = get_db()
+    db.execute(
+        "INSERT INTO admin_logs (admin_username, action, details, timestamp) VALUES (?, ?, ?, ?)",
+        (session.get("username", "?"), action, details, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    db.commit()
+    db.close()
 
 
 def login_required(f):
@@ -471,6 +482,7 @@ def admin_panel():
             (name, description, flag, points, difficulty, category, hint, hint_cost, writeup, attachment_filename)
         )
         db.commit()
+        log_admin_action("Ajout challenge", name)
 
     all_challenges = db.execute("SELECT * FROM challenges").fetchall()
 
@@ -546,6 +558,7 @@ def admin_edit_challenge(challenge_id):
         """, (name, description, flag, points, difficulty, category, hint, hint_cost, writeup, attachment_filename, challenge_id))
         db.commit()
         db.close()
+        log_admin_action("Modification challenge", name)
         return redirect(url_for("admin_panel"))
 
     challenge = db.execute("SELECT * FROM challenges WHERE id = ?", (challenge_id,)).fetchone()
@@ -558,10 +571,13 @@ def admin_edit_challenge(challenge_id):
 @admin_required
 def admin_delete_challenge(challenge_id):
     db = get_db()
+    challenge = db.execute("SELECT name FROM challenges WHERE id = ?", (challenge_id,)).fetchone()
     db.execute("DELETE FROM challenges WHERE id = ?", (challenge_id,))
     db.execute("DELETE FROM solves WHERE challenge_id = ?", (challenge_id,))
     db.commit()
     db.close()
+    if challenge:
+        log_admin_action("Suppression challenge", challenge["name"])
     return redirect(url_for("admin_panel"))
 
 
@@ -597,11 +613,15 @@ def admin_toggle_admin(user_id):
         return redirect(url_for("admin_users"))
 
     db = get_db()
-    user = db.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute("SELECT username, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
     if user:
         new_status = 0 if user["is_admin"] else 1
         db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_status, user_id))
         db.commit()
+        log_admin_action(
+            "Retrait admin" if new_status == 0 else "Promotion admin",
+            user["username"]
+        )
     db.close()
     return redirect(url_for("admin_users"))
 
@@ -613,11 +633,14 @@ def admin_delete_user(user_id):
         return redirect(url_for("admin_users"))
 
     db = get_db()
+    user = db.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     db.execute("DELETE FROM solves WHERE user_id = ?", (user_id,))
     db.execute("DELETE FROM hints_used WHERE user_id = ?", (user_id,))
     db.execute("DELETE FROM users WHERE id = ?", (user_id,))
     db.commit()
     db.close()
+    if user:
+        log_admin_action("Suppression utilisateur", user["username"])
     return redirect(url_for("admin_users"))
 
 
@@ -630,10 +653,13 @@ def admin_reset_password(user_id):
         return redirect(url_for("admin_users"))
 
     db = get_db()
+    user = db.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     hashed = generate_password_hash(new_password)
     db.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user_id))
     db.commit()
     db.close()
+    if user:
+        log_admin_action("Réinitialisation mot de passe", user["username"])
     return redirect(url_for("admin_users"))
 
 
@@ -670,6 +696,89 @@ def admin_export_leaderboard():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=classement.csv"}
     )
+
+
+@app.route("/admin/logs")
+@admin_required
+def admin_logs():
+    db = get_db()
+    logs = db.execute(
+        "SELECT * FROM admin_logs ORDER BY id DESC LIMIT 200"
+    ).fetchall()
+    db.close()
+
+    return render_template("admin_logs.html", logs=logs)
+
+
+@app.route("/admin/import", methods=["GET", "POST"])
+@admin_required
+def admin_import_challenges():
+    if request.method == "GET":
+        return render_template("admin_import.html")
+
+    uploaded_file = request.files.get("import_file")
+    if not uploaded_file or not uploaded_file.filename:
+        return render_template("admin_import.html", error="Aucun fichier sélectionné.")
+
+    filename = uploaded_file.filename.lower()
+    content = uploaded_file.read().decode("utf-8", errors="replace")
+
+    try:
+        if filename.endswith(".json"):
+            data = json.loads(content)
+            if not isinstance(data, list):
+                raise ValueError("le fichier JSON doit contenir une liste de challenges (entre [ ]).")
+            challenges_to_add = data
+        elif filename.endswith(".csv"):
+            challenges_to_add = list(csv.DictReader(StringIO(content)))
+        else:
+            return render_template("admin_import.html", error="Format non supporté. Utilise un fichier .csv ou .json.")
+    except (json.JSONDecodeError, ValueError) as e:
+        return render_template("admin_import.html", error=f"Fichier invalide : {e}")
+
+    required_fields = ["name", "description", "flag", "points", "difficulty", "category"]
+    db = get_db()
+    added = 0
+    skipped = 0
+    errors = []
+
+    for i, item in enumerate(challenges_to_add, start=1):
+        missing = [f for f in required_fields if not item.get(f)]
+        if missing:
+            errors.append(f"Ligne {i} : champs manquants ({', '.join(missing)})")
+            continue
+
+        existing = db.execute("SELECT COUNT(*) FROM challenges WHERE name = ?", (item["name"],)).fetchone()[0]
+        if existing:
+            skipped += 1
+            continue
+
+        try:
+            points = max(0, int(item.get("points", 0)))
+        except (TypeError, ValueError):
+            points = 0
+        try:
+            hint_cost = max(0, int(item.get("hint_cost") or 0))
+        except (TypeError, ValueError):
+            hint_cost = 0
+
+        category = item["category"] if item["category"] in CATEGORIES else "Divers"
+        difficulty = item["difficulty"] if item["difficulty"] in ["Facile", "Moyen", "Difficile"] else "Facile"
+
+        db.execute(
+            "INSERT INTO challenges (name, description, flag, points, difficulty, category, hint, hint_cost, writeup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (item["name"], item["description"], item["flag"], points, difficulty, category, item.get("hint", ""), hint_cost, item.get("writeup", ""))
+        )
+        added += 1
+
+    db.commit()
+    db.close()
+
+    if added:
+        log_admin_action("Import en masse", f"{added} ajouté(s), {skipped} ignoré(s) (déjà existants)")
+
+    success = f"{added} challenge(s) ajouté(s), {skipped} ignoré(s) (nom déjà utilisé)." if (added or skipped) else None
+    return render_template("admin_import.html", success=success, errors=errors)
 
 
 @app.route("/settings", methods=["GET", "POST"])
